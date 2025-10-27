@@ -15,18 +15,24 @@ This project uses Ansible to automatically backup MikroTik router configurations
 ## Prerequisites
 
 - Python 3.8 or higher
-- Ansible 2.9 or higher
+- Python venv module (usually included with Python)
 - Git
 - Make (usually pre-installed on macOS/Linux)
 - SSH access to MikroTik routers with ed25519 key-based authentication
 - A private Git repository for storing backups (GitHub, GitLab, etc.)
 
+### Python Dependencies (installed automatically by setup script)
+- Ansible 2.9 or higher
+- ansible-pylibssh (preferred SSH library for Ansible)
+- paramiko (fallback SSH library)
+- cryptography
+
 ## Quick Start
 
-1. **Install Ansible and required collections:**
+1. **Set up Python virtual environment and install dependencies:**
    ```bash
-   pip install ansible
-   make install
+   ./setup-venv.sh
+   source venv/bin/activate
    ```
 
 2. **Configure your settings** in [config.yml](config.yml):
@@ -58,22 +64,36 @@ The playbook will automatically:
 
 ## Detailed Setup Instructions
 
-### 1. Install Ansible
+### 1. Set Up Python Virtual Environment (Recommended)
+
+Using a virtual environment isolates the project dependencies and prevents conflicts:
 
 ```bash
-pip install ansible
+./setup-venv.sh
 ```
 
-### 2. Install Required Ansible Collections
+This script will:
+- Create a Python virtual environment in `venv/`
+- Install Ansible and required Python packages (paramiko, ansible-pylibssh)
+- Install required Ansible collections
+- Provide usage instructions
+
+After running the setup script, activate the virtual environment:
 
 ```bash
-make install
+source venv/bin/activate
 ```
 
-Or using Ansible directly:
+### 2. Alternative: System-Wide Installation
+
+If you prefer not to use a virtual environment:
+
 ```bash
+pip install -r requirements.txt
 ansible-galaxy collection install -r requirements.yml
 ```
+
+**Note:** This requires SSH libraries (paramiko or ansible-pylibssh) to be installed for Ansible to connect to network devices.
 
 ### 3. Generate ed25519 SSH Key
 
@@ -305,7 +325,10 @@ crontab -e
 ├── create-user.yml        # User management playbook
 ├── sample_inventory.yml   # Sample router inventory (copy to inventory.yml)
 ├── inventory.yml          # Your router inventory (gitignored, create from sample)
-├── requirements.yml       # Ansible dependencies
+├── requirements.txt       # Python dependencies
+├── requirements.yml       # Ansible collection dependencies
+├── setup-venv.sh          # Virtual environment setup script
+├── .gitignore             # Git ignore rules
 ├── .git-hooks/           # Git hooks for automation
 │   └── post-commit       # Auto-push hook
 └── README.md             # This file

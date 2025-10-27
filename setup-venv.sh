@@ -61,11 +61,11 @@ echo "Upgrading pip..."
 pip install --upgrade pip > /dev/null
 echo -e "${GREEN}✓${NC} pip upgraded"
 
-# Install Ansible
+# Install Python dependencies
 echo ""
-echo "Installing Ansible..."
-pip install ansible
-echo -e "${GREEN}✓${NC} Ansible installed"
+echo "Installing Python dependencies (Ansible, paramiko, ansible-pylibssh)..."
+pip install -r requirements.txt
+echo -e "${GREEN}✓${NC} Python dependencies installed"
 
 # Display Ansible version
 ANSIBLE_VERSION=$(ansible --version | head -n 1)

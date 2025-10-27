@@ -1,0 +1,15 @@
+# Python dependencies for MikroTik Backup Automation
+
+# Ansible - automation engine
+ansible>=2.9
+
+# SSH libraries for Ansible network connections
+# ansible-pylibssh is preferred (faster, more secure)
+ansible-pylibssh>=1.0.0
+
+# Paramiko - fallback SSH library
+paramiko>=2.7.0
+
+# Additional dependencies that may be needed
+# These are typically installed as dependencies of the above packages
+cryptography>=3.0
