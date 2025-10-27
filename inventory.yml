@@ -1,0 +1,28 @@
+---
+# Ansible inventory for MikroTik routers
+# Add your routers to the 'mikrotik_routers' group below
+
+all:
+  children:
+    mikrotik_routers:
+      hosts:
+        # Example router entries - replace with your actual routers
+        # router1:
+        #   ansible_host: 192.168.1.1
+        #   backup_filename: router1-core
+        # router2:
+        #   ansible_host: 192.168.2.1
+        #   backup_filename: router2-edge
+        # router3:
+        #   ansible_host: router3.example.com
+        #   backup_filename: router3-branch
+
+      vars:
+        # Connection settings for MikroTik RouterOS
+        ansible_connection: ansible.netcommon.network_cli
+        ansible_network_os: community.routeros.routeros
+        ansible_user: admin
+        # SSH key authentication will be used (no password needed)
+        ansible_ssh_private_key_file: ~/.ssh/id_rsa
+        # Uncomment and set if using a different port
+        # ansible_port: 22

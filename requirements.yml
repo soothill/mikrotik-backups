@@ -1,0 +1,7 @@
+---
+# Ansible Galaxy requirements for MikroTik router backup automation
+collections:
+  - name: community.routeros
+    version: ">=2.0.0"
+  - name: ansible.netcommon
+    version: ">=5.0.0"
