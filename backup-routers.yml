@@ -1,14 +1,47 @@
 ---
+- name: Load Configuration
+  hosts: localhost
+  gather_facts: no
+  connection: local
+
+  tasks:
+    - name: Load configuration file
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/config.yml"
+        name: config
+
+    - name: Validate configuration
+      ansible.builtin.assert:
+        that:
+          - config.backup_repo.remote_url is defined
+          - config.backup_repo.remote_url != ""
+        fail_msg: "Please configure backup_repo.remote_url in config.yml"
+
+    - name: Set global facts from config
+      ansible.builtin.set_fact:
+        backup_dir: "{{ config.backup_repo.local_path }}"
+        backup_remote_url: "{{ config.backup_repo.remote_url }}"
+        backup_branch: "{{ config.backup_repo.branch | default('main') }}"
+        git_user_name: "{{ config.backup_repo.git_user.name }}"
+        git_user_email: "{{ config.backup_repo.git_user.email }}"
+        ssh_private_key: "{{ config.ssh.private_key | expanduser }}"
+        ssh_port: "{{ config.ssh.port | default(22) }}"
+      delegate_to: localhost
+      delegate_facts: true
+
 - name: Backup MikroTik Router Configurations
   hosts: mikrotik_routers
   gather_facts: no
 
   vars:
-    backup_dir: "{{ playbook_dir }}/backups"
-    timestamp: "{{ ansible_date_time.iso8601_basic_short }}"
-    git_commit_message: "Automated backup - {{ ansible_date_time.date }} {{ ansible_date_time.time }}"
+    backup_dir: "{{ hostvars['localhost']['backup_dir'] }}"
 
   tasks:
+    - name: Override SSH settings from config
+      ansible.builtin.set_fact:
+        ansible_ssh_private_key_file: "{{ hostvars['localhost']['ssh_private_key'] }}"
+        ansible_port: "{{ hostvars['localhost']['ssh_port'] }}"
+
     - name: Ensure backup directory exists
       ansible.builtin.file:
         path: "{{ backup_dir }}"
@@ -23,30 +56,33 @@
           - /export compact
       register: config_output
 
-    - name: Save configuration to local file
+    - name: Save configuration to local file (overwrite for git versioning)
       ansible.builtin.copy:
-        content: "{{ config_output.stdout[0] }}"
+        content: "# Router: {{ inventory_hostname }}\n# Host: {{ ansible_host }}\n# Last backup: {{ ansible_date_time.iso8601 }}\n\n{{ config_output.stdout[0] }}"
         dest: "{{ backup_dir }}/{{ backup_filename | default(inventory_hostname) }}.rsc"
         mode: '0644'
       delegate_to: localhost
 
-    - name: Add timestamp comment to backup file
-      ansible.builtin.lineinfile:
-        path: "{{ backup_dir }}/{{ backup_filename | default(inventory_hostname) }}.rsc"
-        line: "# Backup created: {{ ansible_date_time.iso8601 }} from {{ ansible_host }}"
-        insertbefore: BOF
-      delegate_to: localhost
-
-- name: Commit and push changes to Git
+- name: Initialize and Manage Git Repository
   hosts: localhost
   gather_facts: yes
   connection: local
 
   vars:
-    backup_dir: "{{ playbook_dir }}/backups"
+    backup_dir: "{{ hostvars['localhost']['backup_dir'] }}"
+    backup_remote_url: "{{ hostvars['localhost']['backup_remote_url'] }}"
+    backup_branch: "{{ hostvars['localhost']['backup_branch'] }}"
+    git_user_name: "{{ hostvars['localhost']['git_user_name'] }}"
+    git_user_email: "{{ hostvars['localhost']['git_user_email'] }}"
     git_commit_message: "Automated backup - {{ ansible_date_time.date }} {{ ansible_date_time.time }}"
 
   tasks:
+    - name: Ensure backup directory exists
+      ansible.builtin.file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+
     - name: Check if backup directory is a git repository
       ansible.builtin.stat:
         path: "{{ backup_dir }}/.git"
@@ -57,6 +93,82 @@
         cmd: git init
         chdir: "{{ backup_dir }}"
       when: not git_dir.stat.exists
+
+    - name: Configure git user name
+      ansible.builtin.command:
+        cmd: "git config user.name '{{ git_user_name }}'"
+        chdir: "{{ backup_dir }}"
+
+    - name: Configure git user email
+      ansible.builtin.command:
+        cmd: "git config user.email '{{ git_user_email }}'"
+        chdir: "{{ backup_dir }}"
+
+    - name: Check if remote origin exists
+      ansible.builtin.command:
+        cmd: git remote get-url origin
+        chdir: "{{ backup_dir }}"
+      register: git_remote_check
+      failed_when: false
+      changed_when: false
+
+    - name: Add remote origin if not exists
+      ansible.builtin.command:
+        cmd: "git remote add origin {{ backup_remote_url }}"
+        chdir: "{{ backup_dir }}"
+      when: git_remote_check.rc != 0
+
+    - name: Update remote origin URL if it exists but differs
+      ansible.builtin.command:
+        cmd: "git remote set-url origin {{ backup_remote_url }}"
+        chdir: "{{ backup_dir }}"
+      when:
+        - git_remote_check.rc == 0
+        - git_remote_check.stdout != backup_remote_url
+
+    - name: Create README if this is a new repository
+      ansible.builtin.copy:
+        content: |
+          # MikroTik Router Configuration Backups
+
+          This repository contains automated backups of MikroTik router configurations.
+
+          ## About
+
+          - Backups are created automatically using Ansible
+          - Each `.rsc` file contains the complete configuration for one router
+          - Files are overwritten on each backup to leverage git's version control
+          - Git history shows all configuration changes over time
+
+          ## Files
+
+          Each backup file is named `<router-name>.rsc` and contains:
+          - Router identification metadata (hostname, IP)
+          - Backup timestamp
+          - Complete RouterOS configuration in compact format
+
+          ## Usage
+
+          To restore a configuration to a router:
+          1. Download the `.rsc` file for your router
+          2. Upload to the router: `scp <router>.rsc admin@<router-ip>:/`
+          3. Import on router: `/import file-name=<router>.rsc`
+
+          **Warning**: Importing will overwrite the current configuration. Always backup current config first!
+        dest: "{{ backup_dir }}/README.md"
+        mode: '0644'
+        force: no
+      when: not git_dir.stat.exists
+
+    - name: Add .gitignore file
+      ansible.builtin.copy:
+        content: |
+          # Ansible temporary files
+          *.retry
+          .ansible/
+        dest: "{{ backup_dir }}/.gitignore"
+        mode: '0644'
+        force: no
 
     - name: Add all backup files to git
       ansible.builtin.command:
@@ -72,20 +184,32 @@
 
     - name: Commit changes
       ansible.builtin.command:
-        cmd: git commit -m "{{ git_commit_message }}"
+        cmd: "git commit -m '{{ git_commit_message }}'"
         chdir: "{{ backup_dir }}"
       when: git_status.stdout != ""
       register: git_commit
       failed_when: git_commit.rc != 0
 
+    - name: Set upstream branch on first push
+      ansible.builtin.command:
+        cmd: "git push -u origin {{ backup_branch }}"
+        chdir: "{{ backup_dir }}"
+      when:
+        - git_status.stdout != ""
+        - not git_dir.stat.exists
+      register: git_push
+      failed_when: git_push.rc != 0
+
     - name: Push changes to remote repository
       ansible.builtin.command:
         cmd: git push
         chdir: "{{ backup_dir }}"
-      when: git_status.stdout != ""
+      when:
+        - git_status.stdout != ""
+        - git_dir.stat.exists
       register: git_push
       failed_when: git_push.rc != 0
 
     - name: Display backup summary
       ansible.builtin.debug:
-        msg: "{{ 'Changes committed and pushed to repository' if git_status.stdout != '' else 'No changes detected - repository up to date' }}"
+        msg: "{{ 'Changes committed and pushed to ' + backup_remote_url if git_status.stdout != '' else 'No changes detected - repository up to date' }}"

@@ -1,4 +1,4 @@
-.PHONY: help install backup test-connection clean init-backup-repo push-backups install-hooks
+.PHONY: help install backup test-connection clean install-hooks config-check
 
 # Default target - show help
 help:
@@ -8,18 +8,18 @@ help:
 	@echo "Setup Commands:"
 	@echo "  make install           - Install required Ansible collections"
 	@echo "  make install-hooks     - Install git hooks for auto-push on commit"
-	@echo "  make init-backup-repo  - Initialize Git repository in backups directory"
+	@echo "  make config-check      - Validate configuration file"
 	@echo ""
 	@echo "Backup Commands:"
 	@echo "  make backup            - Run backup playbook for all routers"
 	@echo "  make test-connection   - Test SSH connectivity to all routers"
 	@echo ""
-	@echo "Git Commands:"
-	@echo "  make push-backups      - Manually push backups to Git (included in backup)"
-	@echo ""
 	@echo "Maintenance Commands:"
 	@echo "  make clean             - Remove Ansible cache and temporary files"
 	@echo "  make help              - Show this help message"
+	@echo ""
+	@echo "Note: The playbook now automatically initializes the backup repository."
+	@echo "      Configure your backup repository URL in config.yml before running."
 
 # Install required Ansible collections
 install:
@@ -39,8 +39,22 @@ install-hooks:
 		exit 1; \
 	fi
 
+# Validate configuration file
+config-check:
+	@echo "Validating configuration..."
+	@if [ ! -f config.yml ]; then \
+		echo "Error: config.yml not found"; \
+		exit 1; \
+	fi
+	@if grep -q 'remote_url: ""' config.yml; then \
+		echo "Error: Please set backup_repo.remote_url in config.yml"; \
+		echo "Example: remote_url: git@github.com:username/mikrotik-config-backups.git"; \
+		exit 1; \
+	fi
+	@echo "Configuration validated successfully"
+
 # Run the backup playbook
-backup:
+backup: config-check
 	@echo "Starting backup of MikroTik routers..."
 	ansible-playbook -i inventory.yml backup-routers.yml
 
@@ -48,36 +62,6 @@ backup:
 test-connection:
 	@echo "Testing connectivity to MikroTik routers..."
 	ansible -i inventory.yml mikrotik_routers -m community.routeros.command -a "commands='/system identity print'"
-
-# Initialize Git repository in backups directory
-init-backup-repo:
-	@echo "Initializing Git repository in backups directory..."
-	@if [ ! -d backups/.git ]; then \
-		cd backups && \
-		git init && \
-		echo "Git repository initialized. Don't forget to add your remote:"; \
-		echo "  cd backups && git remote add origin <your-repo-url>"; \
-	else \
-		echo "Git repository already exists in backups directory"; \
-	fi
-
-# Manually push backups to Git
-push-backups:
-	@echo "Pushing backups to Git repository..."
-	@if [ -d backups/.git ]; then \
-		cd backups && \
-		git add . && \
-		if git diff-index --quiet HEAD --; then \
-			echo "No changes to commit"; \
-		else \
-			git commit -m "Manual backup commit - $$(date '+%Y-%m-%d %H:%M:%S')" && \
-			git push; \
-		fi; \
-	else \
-		echo "Error: backups directory is not a Git repository"; \
-		echo "Run 'make init-backup-repo' first"; \
-		exit 1; \
-	fi
 
 # Clean up temporary files
 clean:

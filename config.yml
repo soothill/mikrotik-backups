@@ -1,0 +1,30 @@
+---
+# MikroTik Backup Configuration
+# This file contains settings for the backup automation
+
+# Backup Repository Settings
+backup_repo:
+  # Local path where backups will be stored (relative to playbook or absolute)
+  local_path: "../mikrotik-config-backups"
+
+  # Remote git repository URL for backups
+  # Examples:
+  #   - SSH: git@github.com:username/mikrotik-config-backups.git
+  #   - HTTPS: https://github.com/username/mikrotik-config-backups.git
+  remote_url: ""
+
+  # Branch name to use for backups
+  branch: "main"
+
+  # Git user configuration for commits
+  git_user:
+    name: "MikroTik Backup Bot"
+    email: "backup@example.com"
+
+# SSH Key Settings
+ssh:
+  # Path to ed25519 private key for router authentication
+  private_key: "~/.ssh/id_ed25519"
+
+  # SSH port (default is 22)
+  port: 22
