@@ -96,9 +96,15 @@
 
     - name: Initialize git repository if not exists
       ansible.builtin.command:
-        cmd: git init
+        cmd: "git init -b {{ backup_branch }}"
         chdir: "{{ backup_dir }}"
       when: not git_dir.stat.exists
+
+    - name: Ensure we're on the correct branch
+      ansible.builtin.command:
+        cmd: "git checkout -B {{ backup_branch }}"
+        chdir: "{{ backup_dir }}"
+      when: git_dir.stat.exists
 
     - name: Configure git user name
       ansible.builtin.command:
