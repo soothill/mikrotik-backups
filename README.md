@@ -83,7 +83,36 @@ Press Enter to save to the default location (`~/.ssh/id_ed25519`).
 
 ### 4. Configure SSH Key Authentication on MikroTik Routers
 
-On each MikroTik router, you need to:
+You have two options for setting up SSH key authentication:
+
+#### Option A: Automated User Creation (Recommended)
+
+Use the included playbook to automatically create a user with SSH key access on all routers:
+
+1. Edit [config.yml](config.yml) and uncomment/configure the `user_management` section:
+```yaml
+user_management:
+  enabled: true
+  username: "ansible-backup"
+  group: "full"  # or "read" for read-only access
+  ssh_public_key: "~/.ssh/id_ed25519.pub"
+  password: ""  # Leave empty for key-only auth
+```
+
+2. Run the user creation playbook:
+```bash
+make create-user
+```
+
+This will automatically:
+- Create the user on all routers (or update if exists)
+- Upload and configure the SSH public key
+- Set appropriate permissions
+- Configure key-based authentication
+
+#### Option B: Manual Setup
+
+On each MikroTik router manually:
 
 1. Upload your public SSH key to the router:
 ```bash
@@ -101,7 +130,7 @@ scp ~/.ssh/id_ed25519.pub admin@<router-ip>:id_ed25519.pub
 /ip service enable ssh
 ```
 
-4. (Optional) For better security, disable password authentication:
+4. (Optional) For better security, enable strong crypto:
 ```
 /ip ssh set strong-crypto=yes
 ```
@@ -215,6 +244,22 @@ Before running backups, test SSH connections:
 make test-connection
 ```
 
+### Create/Update User on Routers
+
+To create or update a user with SSH key access on all routers:
+
+1. Configure the `user_management` section in [config.yml](config.yml)
+2. Run:
+```bash
+make create-user
+```
+
+This is useful for:
+- Initial setup of SSH key authentication
+- Creating dedicated backup users
+- Rotating SSH keys
+- Adding new users to multiple routers at once
+
 ### Schedule Automated Backups
 
 Add a cron job to run backups automatically:
@@ -236,6 +281,7 @@ crontab -e
 | `make config-check` | Validate configuration file |
 | `make backup` | Run backup for all routers |
 | `make test-connection` | Test SSH connectivity to routers |
+| `make create-user` | Create/update user with SSH key on all routers |
 | `make install-hooks` | Enable auto-push on git commits (this repo) |
 | `make clean` | Remove temporary files and cache |
 
@@ -246,6 +292,7 @@ crontab -e
 ├── Makefile              # Make commands for automation
 ├── config.yml            # Main configuration file
 ├── backup-routers.yml    # Main Ansible playbook
+├── create-user.yml       # User management playbook
 ├── inventory.yml         # Router inventory configuration
 ├── requirements.yml      # Ansible dependencies
 ├── .git-hooks/          # Git hooks for automation

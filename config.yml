@@ -28,3 +28,24 @@ ssh:
 
   # SSH port (default is 22)
   port: 22
+
+# User Management (optional)
+# Uncomment and configure to create/update a user with SSH key access
+# user_management:
+#   # Enable user creation/update
+#   enabled: false
+#
+#   # Username to create/update
+#   username: "ansible-backup"
+#
+#   # User group (default: full)
+#   # Options: read, write, full
+#   group: "full"
+#
+#   # Path to SSH public key file (ed25519 recommended)
+#   # This will be uploaded to the router for key-based authentication
+#   ssh_public_key: "~/.ssh/id_ed25519.pub"
+#
+#   # Optional: Set a password for the user (leave empty for key-only auth)
+#   # If not set, user can only login with SSH key
+#   password: ""

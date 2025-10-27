@@ -1,4 +1,4 @@
-.PHONY: help install backup test-connection clean install-hooks config-check
+.PHONY: help install backup test-connection clean install-hooks config-check create-user
 
 # Default target - show help
 help:
@@ -13,6 +13,9 @@ help:
 	@echo "Backup Commands:"
 	@echo "  make backup            - Run backup playbook for all routers"
 	@echo "  make test-connection   - Test SSH connectivity to all routers"
+	@echo ""
+	@echo "User Management Commands:"
+	@echo "  make create-user       - Create/update user with SSH key on routers"
 	@echo ""
 	@echo "Maintenance Commands:"
 	@echo "  make clean             - Remove Ansible cache and temporary files"
@@ -62,6 +65,16 @@ backup: config-check
 test-connection:
 	@echo "Testing connectivity to MikroTik routers..."
 	ansible -i inventory.yml mikrotik_routers -m community.routeros.command -a "commands='/system identity print'"
+
+# Create/update user with SSH key on routers
+create-user:
+	@echo "Creating/updating user on MikroTik routers..."
+	@if ! grep -q "enabled: true" config.yml | grep -A 20 "user_management"; then \
+		echo "Error: User management not enabled in config.yml"; \
+		echo "Please uncomment and configure the user_management section"; \
+		exit 1; \
+	fi
+	ansible-playbook -i inventory.yml create-user.yml
 
 # Clean up temporary files
 clean:

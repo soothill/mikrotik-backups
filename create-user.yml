@@ -1,0 +1,134 @@
+---
+- name: Load Configuration
+  hosts: localhost
+  gather_facts: no
+  connection: local
+
+  tasks:
+    - name: Load configuration file
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/config.yml"
+        name: config
+
+    - name: Validate user management configuration
+      ansible.builtin.assert:
+        that:
+          - config.user_management is defined
+          - config.user_management.enabled is defined
+          - config.user_management.enabled == true
+          - config.user_management.username is defined
+          - config.user_management.ssh_public_key is defined
+        fail_msg: "Please enable and configure user_management section in config.yml"
+
+    - name: Check if SSH public key file exists
+      ansible.builtin.stat:
+        path: "{{ config.user_management.ssh_public_key | expanduser }}"
+      register: pubkey_file
+
+    - name: Fail if SSH public key file doesn't exist
+      ansible.builtin.fail:
+        msg: "SSH public key file not found: {{ config.user_management.ssh_public_key }}"
+      when: not pubkey_file.stat.exists
+
+    - name: Read SSH public key
+      ansible.builtin.slurp:
+        src: "{{ config.user_management.ssh_public_key | expanduser }}"
+      register: ssh_pubkey_content
+
+    - name: Set global facts from config
+      ansible.builtin.set_fact:
+        ssh_private_key: "{{ config.ssh.private_key | expanduser }}"
+        ssh_port: "{{ config.ssh.port | default(22) }}"
+        new_username: "{{ config.user_management.username }}"
+        new_user_group: "{{ config.user_management.group | default('full') }}"
+        new_user_password: "{{ config.user_management.password | default('') }}"
+        ssh_public_key: "{{ ssh_pubkey_content.content | b64decode | trim }}"
+      delegate_to: localhost
+      delegate_facts: true
+
+- name: Create User on MikroTik Routers
+  hosts: mikrotik_routers
+  gather_facts: no
+
+  vars:
+    new_username: "{{ hostvars['localhost']['new_username'] }}"
+    new_user_group: "{{ hostvars['localhost']['new_user_group'] }}"
+    new_user_password: "{{ hostvars['localhost']['new_user_password'] }}"
+    ssh_public_key: "{{ hostvars['localhost']['ssh_public_key'] }}"
+
+  tasks:
+    - name: Override SSH settings from config
+      ansible.builtin.set_fact:
+        ansible_ssh_private_key_file: "{{ hostvars['localhost']['ssh_private_key'] }}"
+        ansible_port: "{{ hostvars['localhost']['ssh_port'] }}"
+
+    - name: Check if user already exists
+      community.routeros.command:
+        commands:
+          - "/user print where name={{ new_username }}"
+      register: user_check
+      failed_when: false
+
+    - name: Create user if it doesn't exist
+      community.routeros.command:
+        commands:
+          - "/user add name={{ new_username }} group={{ new_user_group }}{{ ' password=' + new_user_password if new_user_password else '' }}"
+      when: user_check.stdout[0] == ""
+      register: user_create
+
+    - name: Update user group if user exists
+      community.routeros.command:
+        commands:
+          - "/user set {{ new_username }} group={{ new_user_group }}"
+      when: user_check.stdout[0] != ""
+
+    - name: Update user password if provided and user exists
+      community.routeros.command:
+        commands:
+          - "/user set {{ new_username }} password={{ new_user_password }}"
+      when:
+        - user_check.stdout[0] != ""
+        - new_user_password != ""
+      no_log: true
+
+    - name: Check if SSH key already exists for user
+      community.routeros.command:
+        commands:
+          - "/user ssh-keys print where user={{ new_username }}"
+      register: ssh_key_check
+      failed_when: false
+
+    - name: Extract key name from existing keys
+      ansible.builtin.set_fact:
+        existing_key_line: "{{ ssh_key_check.stdout[0].split('\n') | select('match', '.*name=.*') | first | default('') }}"
+      when: ssh_key_check.stdout[0] != ""
+
+    - name: Parse existing key name
+      ansible.builtin.set_fact:
+        existing_key_name: "{{ existing_key_line | regex_search('name=([^\\s]+)', '\\1') | first | default('') }}"
+      when:
+        - ssh_key_check.stdout[0] != ""
+        - existing_key_line is defined
+        - existing_key_line != ""
+
+    - name: Remove old SSH key if it exists
+      community.routeros.command:
+        commands:
+          - "/user ssh-keys remove {{ existing_key_name }}"
+      when:
+        - existing_key_name is defined
+        - existing_key_name != ""
+
+    - name: Add SSH public key for user
+      community.routeros.command:
+        commands:
+          - "/user ssh-keys import user={{ new_username }} public-key-file=none key-data=\"{{ ssh_public_key }}\""
+      register: key_import
+
+    - name: Display success message
+      ansible.builtin.debug:
+        msg:
+          - "User '{{ new_username }}' configured successfully on {{ inventory_hostname }}"
+          - "Group: {{ new_user_group }}"
+          - "SSH key: Added"
+          - "{{ 'Password: Set' if new_user_password else 'Password: Not set (key-only authentication)' }}"
