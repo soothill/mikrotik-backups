@@ -42,6 +42,12 @@
         ansible_ssh_private_key_file: "{{ hostvars['localhost']['ssh_private_key'] }}"
         ansible_port: "{{ hostvars['localhost']['ssh_port'] }}"
 
+    - name: Get current timestamp
+      ansible.builtin.set_fact:
+        backup_timestamp: "{{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }}"
+      delegate_to: localhost
+      run_once: true
+
     - name: Ensure backup directory exists
       ansible.builtin.file:
         path: "{{ backup_dir }}"
@@ -58,7 +64,7 @@
 
     - name: Save configuration to local file (overwrite for git versioning)
       ansible.builtin.copy:
-        content: "# Router: {{ inventory_hostname }}\n# Host: {{ ansible_host }}\n# Last backup: {{ ansible_date_time.iso8601 }}\n\n{{ config_output.stdout[0] }}"
+        content: "# Router: {{ inventory_hostname }}\n# Host: {{ ansible_host }}\n# Last backup: {{ backup_timestamp }}\n\n{{ config_output.stdout[0] }}"
         dest: "{{ backup_dir }}/{{ backup_filename | default(inventory_hostname) }}.rsc"
         mode: '0644'
       delegate_to: localhost
