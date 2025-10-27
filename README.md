@@ -37,7 +37,11 @@ This project uses Ansible to automatically backup MikroTik router configurations
      branch: "main"
    ```
 
-3. **Add your routers** to [inventory.yml](inventory.yml)
+3. **Configure your routers:**
+   ```bash
+   cp sample_inventory.yml inventory.yml
+   # Edit inventory.yml and add your routers
+   ```
 
 4. **Run your first backup:**
    ```bash
@@ -174,7 +178,13 @@ ssh:
 
 ### 7. Configure Your Router Inventory
 
-Edit [inventory.yml](inventory.yml) and add your routers:
+Create your inventory file from the sample:
+
+```bash
+cp sample_inventory.yml inventory.yml
+```
+
+Then edit [inventory.yml](inventory.yml) and add your routers:
 
 ```yaml
 all:
@@ -289,15 +299,16 @@ crontab -e
 
 ```
 .
-├── Makefile              # Make commands for automation
-├── config.yml            # Main configuration file
-├── backup-routers.yml    # Main Ansible playbook
-├── create-user.yml       # User management playbook
-├── inventory.yml         # Router inventory configuration
-├── requirements.yml      # Ansible dependencies
-├── .git-hooks/          # Git hooks for automation
-│   └── post-commit      # Auto-push hook
-└── README.md            # This file
+├── Makefile               # Make commands for automation
+├── config.yml             # Main configuration file
+├── backup-routers.yml     # Main Ansible playbook
+├── create-user.yml        # User management playbook
+├── sample_inventory.yml   # Sample router inventory (copy to inventory.yml)
+├── inventory.yml          # Your router inventory (gitignored, create from sample)
+├── requirements.yml       # Ansible dependencies
+├── .git-hooks/           # Git hooks for automation
+│   └── post-commit       # Auto-push hook
+└── README.md             # This file
 
 ../mikrotik-config-backups/  # Backup repository (created automatically)
 ├── .git/                    # Git repository

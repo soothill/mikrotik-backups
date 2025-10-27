@@ -1,0 +1,30 @@
+# Ansible
+*.retry
+.ansible/
+
+# Python virtual environment
+venv/
+.venv/
+env/
+.env/
+
+# Inventory file (contains sensitive router information)
+inventory.yml
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

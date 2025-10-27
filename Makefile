@@ -59,16 +59,31 @@ config-check:
 # Run the backup playbook
 backup: config-check
 	@echo "Starting backup of MikroTik routers..."
+	@if [ ! -f inventory.yml ]; then \
+		echo "Error: inventory.yml not found"; \
+		echo "Copy sample_inventory.yml to inventory.yml and configure your routers"; \
+		exit 1; \
+	fi
 	ansible-playbook -i inventory.yml backup-routers.yml
 
 # Test SSH connectivity to all routers
 test-connection:
 	@echo "Testing connectivity to MikroTik routers..."
+	@if [ ! -f inventory.yml ]; then \
+		echo "Error: inventory.yml not found"; \
+		echo "Copy sample_inventory.yml to inventory.yml and configure your routers"; \
+		exit 1; \
+	fi
 	ansible -i inventory.yml mikrotik_routers -m community.routeros.command -a "commands='/system identity print'"
 
 # Create/update user with SSH key on routers
 create-user:
 	@echo "Creating/updating user on MikroTik routers..."
+	@if [ ! -f inventory.yml ]; then \
+		echo "Error: inventory.yml not found"; \
+		echo "Copy sample_inventory.yml to inventory.yml and configure your routers"; \
+		exit 1; \
+	fi
 	@if ! grep -q "enabled: true" config.yml | grep -A 20 "user_management"; then \
 		echo "Error: User management not enabled in config.yml"; \
 		echo "Please uncomment and configure the user_management section"; \
