@@ -166,7 +166,9 @@ Create a new **private** repository on GitHub, GitLab, or your Git hosting servi
 - Visibility: **Private** (router configs contain sensitive information!)
 - Don't initialize with README (the playbook will create one)
 
-Get the SSH clone URL (e.g., `git@github.com:username/mikrotik-config-backups.git`)
+**Get the SSH clone URL** (e.g., `git@github.com:username/mikrotik-config-backups.git`)
+
+**Important:** You **must** use the SSH URL format, not HTTPS. The automation requires SSH key-based authentication and does not support HTTPS URLs which require interactive credentials.
 
 ### 6. Configure Settings
 
@@ -177,7 +179,9 @@ backup_repo:
   # Where backups are stored locally (can be outside this repo)
   local_path: "../mikrotik-config-backups"
 
-  # Your backup repository URL (MUST be configured!)
+  # Your backup repository URL (MUST use SSH format!)
+  # SSH format: git@github.com:username/repo.git
+  # HTTPS NOT supported: https://github.com/username/repo.git
   remote_url: "git@github.com:username/mikrotik-config-backups.git"
 
   # Branch name

@@ -8,9 +8,12 @@ backup_repo:
   local_path: "../mikrotik-config-backups"
 
   # Remote git repository URL for backups
+  # IMPORTANT: Must use SSH URL format (HTTPS is not supported for automation)
+  # Format: git@hostname:username/repository.git
   # Examples:
-  #   - SSH: git@github.com:username/mikrotik-config-backups.git
-  #   - HTTPS: https://github.com/username/mikrotik-config-backups.git
+  #   - GitHub: git@github.com:username/mikrotik-config-backups.git
+  #   - GitLab: git@gitlab.com:username/mikrotik-config-backups.git
+  #   - Self-hosted: git@git.example.com:username/mikrotik-config-backups.git
   remote_url: ""
 
   # Branch name to use for backups
