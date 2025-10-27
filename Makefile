@@ -1,4 +1,4 @@
-.PHONY: help install backup test-connection clean install-hooks config-check create-user
+.PHONY: help install backup backup-with-alerts test-connection clean install-hooks config-check create-user
 
 # Default target - show help
 help:
@@ -11,8 +11,9 @@ help:
 	@echo "  make config-check      - Validate configuration file"
 	@echo ""
 	@echo "Backup Commands:"
-	@echo "  make backup            - Run backup playbook for all routers"
-	@echo "  make test-connection   - Test SSH connectivity to all routers"
+	@echo "  make backup              - Run backup playbook for all routers"
+	@echo "  make backup-with-alerts  - Run backup with email alerts on failure"
+	@echo "  make test-connection     - Test SSH connectivity to all routers"
 	@echo ""
 	@echo "User Management Commands:"
 	@echo "  make create-user       - Create/update user with SSH key on routers"
@@ -65,6 +66,15 @@ backup: config-check
 		exit 1; \
 	fi
 	ansible-playbook -i inventory.yml backup-routers.yml
+
+# Run backup with email alerts on failure
+backup-with-alerts: config-check
+	@if [ ! -f inventory.yml ]; then \
+		echo "Error: inventory.yml not found"; \
+		echo "Copy sample_inventory.yml to inventory.yml and configure your routers"; \
+		exit 1; \
+	fi
+	@./backup-with-alerts.sh
 
 # Test SSH connectivity to all routers
 test-connection:

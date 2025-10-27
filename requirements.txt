@@ -13,3 +13,7 @@ paramiko>=2.7.0
 # Additional dependencies that may be needed
 # These are typically installed as dependencies of the above packages
 cryptography>=3.0
+
+# Email alert dependencies
+# PyYAML - for reading config.yml in email alert script
+pyyaml>=5.1

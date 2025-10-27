@@ -11,6 +11,7 @@ This project uses Ansible to automatically backup MikroTik router configurations
 - **Git-optimized versioning** - files are overwritten, git tracks changes
 - **Full automation** - repository creation, commits, and pushes handled automatically
 - **Configurable via YAML** - all settings in one config file
+- **Email alerts** - optional notifications on backup failures
 
 ## Prerequisites
 
@@ -26,6 +27,7 @@ This project uses Ansible to automatically backup MikroTik router configurations
 - ansible-pylibssh (preferred SSH library for Ansible)
 - paramiko (fallback SSH library)
 - cryptography
+- pyyaml (for email alert configuration parsing)
 
 ## Quick Start
 
@@ -294,6 +296,45 @@ This is useful for:
 - Rotating SSH keys
 - Adding new users to multiple routers at once
 
+### Configure Email Alerts (Optional)
+
+To receive email notifications when backups fail, edit [config.yml](config.yml):
+
+```yaml
+email_alerts:
+  enabled: true
+
+  smtp:
+    server: "smtp.gmail.com"
+    port: 587
+    use_tls: true
+    username: "your-email@gmail.com"
+    password: "your-app-password"  # For Gmail, use App Password
+
+  from: "mikrotik-backup@example.com"
+  to:
+    - "admin@example.com"
+    - "network-team@example.com"
+
+  subject_prefix: "[MikroTik Backup]"
+```
+
+**Gmail Setup:**
+1. Enable 2-factor authentication on your Google account
+2. Generate an App Password: https://myaccount.google.com/apppasswords
+3. Use the App Password in the config (not your regular password)
+
+**Other SMTP Providers:**
+- **Office 365**: smtp.office365.com, port 587
+- **Outlook.com**: smtp-mail.outlook.com, port 587
+- **SendGrid**: smtp.sendgrid.net, port 587
+- **Mailgun**: smtp.mailgun.org, port 587
+
+Then run backups with email alerts:
+```bash
+make backup-with-alerts
+```
+
 ### Schedule Automated Backups
 
 Add a cron job to run backups automatically:
@@ -302,8 +343,11 @@ Add a cron job to run backups automatically:
 # Edit crontab
 crontab -e
 
-# Add this line to run backups daily at 2 AM
-0 2 * * * cd /path/to/mikrotik-backups && make backup >> /var/log/mikrotik-backup.log 2>&1
+# Run backups daily at 2 AM with email alerts on failure
+0 2 * * * cd /path/to/mikrotik-backups && source venv/bin/activate && make backup-with-alerts
+
+# Or without email alerts (logs only)
+0 2 * * * cd /path/to/mikrotik-backups && source venv/bin/activate && make backup >> /var/log/mikrotik-backup.log 2>&1
 ```
 
 ## Available Make Commands
@@ -314,6 +358,7 @@ crontab -e
 | `make install` | Install required Ansible collections |
 | `make config-check` | Validate configuration file |
 | `make backup` | Run backup for all routers |
+| `make backup-with-alerts` | Run backup with email alerts on failure |
 | `make test-connection` | Test SSH connectivity to routers |
 | `make create-user` | Create/update user with SSH key on all routers |
 | `make install-hooks` | Enable auto-push on git commits (this repo) |
@@ -327,6 +372,8 @@ crontab -e
 ├── config.yml             # Main configuration file
 ├── backup-routers.yml     # Main Ansible playbook
 ├── create-user.yml        # User management playbook
+├── backup-with-alerts.sh  # Backup wrapper with email alerts
+├── send-alert.py          # Email notification script
 ├── sample_inventory.yml   # Sample router inventory (copy to inventory.yml)
 ├── inventory.yml          # Your router inventory (gitignored, create from sample)
 ├── requirements.txt       # Python dependencies
@@ -335,6 +382,7 @@ crontab -e
 ├── .gitignore             # Git ignore rules
 ├── .git-hooks/           # Git hooks for automation
 │   └── post-commit       # Auto-push hook
+├── logs/                 # Backup logs (gitignored)
 └── README.md             # This file
 
 ../mikrotik-config-backups/  # Backup repository (created automatically)

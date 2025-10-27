@@ -2,6 +2,10 @@
 *.retry
 .ansible/
 
+# Logs
+logs/
+*.log
+
 # Python virtual environment
 venv/
 .venv/

@@ -32,6 +32,32 @@ ssh:
   # SSH port (default is 22)
   port: 22
 
+# Email Alerts (optional)
+# Configure email notifications for backup failures
+# email_alerts:
+#   # Enable email notifications
+#   enabled: false
+#
+#   # SMTP server settings
+#   smtp:
+#     server: "smtp.gmail.com"
+#     port: 587
+#     use_tls: true
+#     # Username for SMTP authentication
+#     username: "your-email@gmail.com"
+#     # Password or app-specific password (for Gmail, use App Password)
+#     # Consider using environment variable: ${SMTP_PASSWORD}
+#     password: ""
+#
+#   # Email addresses
+#   from: "mikrotik-backup@example.com"
+#   to:
+#     - "admin@example.com"
+#     # - "network-team@example.com"  # Add multiple recipients
+#
+#   # Email subject prefix
+#   subject_prefix: "[MikroTik Backup]"
+
 # User Management (optional)
 # Uncomment and configure to create/update a user with SSH key access
 # user_management:
