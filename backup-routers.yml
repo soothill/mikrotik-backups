@@ -100,11 +100,22 @@
         chdir: "{{ backup_dir }}"
       when: not git_dir.stat.exists
 
-    - name: Ensure we're on the correct branch
+    - name: Get current branch name (for existing repos)
+      ansible.builtin.command:
+        cmd: git branch --show-current
+        chdir: "{{ backup_dir }}"
+      register: current_branch
+      when: git_dir.stat.exists
+      changed_when: false
+      failed_when: false
+
+    - name: Switch to correct branch if needed
       ansible.builtin.command:
         cmd: "git checkout -B {{ backup_branch }}"
         chdir: "{{ backup_dir }}"
-      when: git_dir.stat.exists
+      when:
+        - git_dir.stat.exists
+        - current_branch.stdout != backup_branch
 
     - name: Configure git user name
       ansible.builtin.command:
@@ -202,15 +213,45 @@
       register: git_commit
       failed_when: git_commit.rc != 0
 
-    - name: Set upstream branch on first push
+    - name: Check if upstream is configured
+      ansible.builtin.command:
+        cmd: git rev-parse --abbrev-ref --symbolic-full-name @{u}
+        chdir: "{{ backup_dir }}"
+      register: upstream_check
+      failed_when: false
+      changed_when: false
+      when: git_status.stdout != ""
+
+    - name: Push with upstream setup (first push or no upstream)
       ansible.builtin.command:
         cmd: "git push -u origin {{ backup_branch }}"
         chdir: "{{ backup_dir }}"
       when:
         - git_status.stdout != ""
-        - not git_dir.stat.exists
-      register: git_push
-      failed_when: git_push.rc != 0
+        - upstream_check.rc != 0
+      register: git_push_first
+      failed_when: false
+
+    - name: Display first push error if failed
+      ansible.builtin.fail:
+        msg: |
+          Failed to push to remote repository!
+
+          Error: {{ git_push_first.stderr }}
+
+          Troubleshooting steps:
+          1. Verify the remote URL is correct: {{ backup_remote_url }}
+          2. Check that you have push access to the repository
+          3. Ensure your SSH key is added to your git hosting service
+          4. Test SSH access: ssh -T git@github.com (for GitHub)
+          5. Check the backup repository exists on the remote
+
+          Branch: {{ backup_branch }}
+          Directory: {{ backup_dir }}
+      when:
+        - git_push_first is defined
+        - git_push_first.rc is defined
+        - git_push_first.rc != 0
 
     - name: Push changes to remote repository
       ansible.builtin.command:
@@ -218,9 +259,29 @@
         chdir: "{{ backup_dir }}"
       when:
         - git_status.stdout != ""
-        - git_dir.stat.exists
-      register: git_push
-      failed_when: git_push.rc != 0
+        - upstream_check.rc == 0
+      register: git_push_regular
+      failed_when: false
+
+    - name: Display regular push error if failed
+      ansible.builtin.fail:
+        msg: |
+          Failed to push to remote repository!
+
+          Error: {{ git_push_regular.stderr }}
+
+          Troubleshooting steps:
+          1. Check network connectivity to {{ backup_remote_url }}
+          2. Verify you have push access to the repository
+          3. Pull any remote changes first: cd {{ backup_dir }} && git pull
+          4. Check for conflicts or diverged branches
+
+          Branch: {{ backup_branch }}
+          Directory: {{ backup_dir }}
+      when:
+        - git_push_regular is defined
+        - git_push_regular.rc is defined
+        - git_push_regular.rc != 0
 
     - name: Display backup summary
       ansible.builtin.debug:
