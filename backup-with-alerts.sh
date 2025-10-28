@@ -79,6 +79,39 @@ if ansible-playbook -i inventory.yml backup-routers.yml 2>&1 | tee "$LOG_FILE"; 
     # Update latest log symlink
     ln -sf "$(basename "$LOG_FILE")" "$LATEST_LOG"
 
+    # Check if configuration changes were detected
+    CHANGES_FILE="${SCRIPT_DIR}/logs/config-changes.txt"
+    if [ -f "$CHANGES_FILE" ]; then
+        echo ""
+        echo -e "${YELLOW}Configuration changes detected!${NC}"
+        echo -e "${YELLOW}Sending change notification email...${NC}"
+
+        # Read the changes
+        CHANGE_DETAILS=$(cat "$CHANGES_FILE")
+
+        # Prepare email body
+        EMAIL_BODY="Router configuration changes have been detected and backed up successfully.
+
+${CHANGE_DETAILS}
+
+Backup Repository: Check your git repository for full diff
+Log File: ${LOG_FILE}
+
+To view changes in the backup repository:
+    cd $(grep -A 1 'backup_repo:' config.yml | grep 'local_path:' | awk '{print $2}' | tr -d '"')
+    git log -1 -p
+    git diff HEAD~1
+
+This is an informational alert. The backup completed successfully and changes have been committed to the repository.
+"
+
+        # Send change notification email
+        send_alert "Configuration Changes Detected" "$EMAIL_BODY"
+
+        # Remove the changes file after processing
+        rm -f "$CHANGES_FILE"
+    fi
+
     exit 0
 else
     # Failure

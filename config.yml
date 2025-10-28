@@ -33,10 +33,14 @@ ssh:
   port: 22
 
 # Email Alerts (optional)
-# Configure email notifications for backup failures
+# Configure email notifications for backup failures and configuration changes
 # email_alerts:
 #   # Enable email notifications
 #   enabled: false
+#
+#   # Send alerts when configuration changes are detected
+#   # This notifies you when router configs change between backup runs
+#   notify_on_change: true
 #
 #   # SMTP server settings
 #   smtp:

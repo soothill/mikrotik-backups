@@ -298,11 +298,15 @@ This is useful for:
 
 ### Configure Email Alerts (Optional)
 
-To receive email notifications when backups fail, edit [config.yml](config.yml):
+To receive email notifications when backups fail or configuration changes are detected, edit [config.yml](config.yml):
 
 ```yaml
 email_alerts:
   enabled: true
+
+  # Send alerts when configuration changes are detected
+  # This helps monitor unauthorized or unexpected config modifications
+  notify_on_change: true
 
   smtp:
     server: "smtp.gmail.com"
@@ -318,6 +322,14 @@ email_alerts:
 
   subject_prefix: "[MikroTik Backup]"
 ```
+
+**Email Notifications:**
+- **Failure Alerts**: Sent when backups fail with error details and troubleshooting steps
+- **Change Alerts**: Sent when router configurations change between backup runs (if `notify_on_change: true`)
+  - Includes list of changed routers
+  - Summary of changes
+  - Full diff of what changed
+  - Helps detect unauthorized modifications or track planned changes
 
 **Gmail Setup:**
 1. Enable 2-factor authentication on your Google account
@@ -402,8 +414,10 @@ crontab -e
 4. **Export**: Runs `/export compact` command to get current configuration
 5. **Save**: Overwrites backup files (git tracks changes via commits)
 6. **Repository Setup**: Initializes git repo, configures remote, user settings
-7. **Commit**: Creates a commit with timestamp
-8. **Push**: Automatically pushes to remote repository
+7. **Detect Changes**: Compares new configs with previous backup (git diff)
+8. **Commit**: Creates a commit with timestamp (only if changes detected)
+9. **Push**: Automatically pushes to remote repository
+10. **Notify**: Sends email alerts for failures or configuration changes (if enabled)
 
 ## Backup File Format
 
@@ -431,6 +445,7 @@ Since files are overwritten (not timestamped), you get:
 - `git blame` to see when each line was last modified
 - Easy rollback to any previous configuration version
 - Efficient storage (git tracks deltas, not full copies)
+- **Change detection**: Automatic alerts when configurations are modified
 
 To view changes:
 ```bash
@@ -438,7 +453,37 @@ cd ../mikrotik-config-backups
 git log                          # View commit history
 git diff HEAD~1 router1-core.rsc # See what changed in last backup
 git show <commit>:router1-core.rsc # View config at specific point in time
+git log -p router1-core.rsc      # View all changes to a specific router
 ```
+
+## Configuration Change Detection
+
+When `notify_on_change` is enabled, you'll receive email alerts whenever router configurations change:
+
+**What triggers an alert:**
+- Firewall rules modified
+- IP addresses changed
+- Users added/removed
+- Routing changes
+- Interface configuration changes
+- Any other configuration modifications
+
+**What does NOT trigger an alert:**
+- Timestamp-only changes (backup metadata updates are filtered out)
+- No changes detected (backups run but configs unchanged)
+
+**What you'll receive:**
+- Email notification with change summary
+- List of which routers changed
+- Git diff showing exact changes
+- Links to view full details in git repository
+
+**Use cases:**
+- Detect unauthorized configuration changes
+- Audit trail for compliance
+- Track planned maintenance changes
+- Monitor for security incidents
+- Team coordination (everyone sees what changed)
 
 ## Troubleshooting
 

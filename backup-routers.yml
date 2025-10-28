@@ -26,6 +26,8 @@
         git_user_email: "{{ config.backup_repo.git_user.email }}"
         ssh_private_key: "{{ config.ssh.private_key | expanduser }}"
         ssh_port: "{{ config.ssh.port | default(22) }}"
+        email_alerts_enabled: "{{ config.email_alerts.enabled | default(false) }}"
+        notify_on_change: "{{ config.email_alerts.notify_on_change | default(true) if config.email_alerts is defined and config.email_alerts.enabled | default(false) else false }}"
       delegate_to: localhost
       delegate_facts: true
 
@@ -204,6 +206,62 @@
         chdir: "{{ backup_dir }}"
       register: git_status
       changed_when: false
+
+    - name: Get detailed diff if changes detected (ignore timestamp lines)
+      ansible.builtin.shell:
+        cmd: |
+          git diff --cached | grep -v '^[-+]# Last backup:' || true
+        chdir: "{{ backup_dir }}"
+      register: git_diff_filtered
+      when: git_status.stdout != ""
+      changed_when: false
+
+    - name: Check if there are real changes (not just timestamps)
+      ansible.builtin.set_fact:
+        has_real_changes: "{{ git_diff_filtered.stdout | length > 0 }}"
+      when: git_status.stdout != ""
+
+    - name: Get diff stats for real changes
+      ansible.builtin.command:
+        cmd: git diff --cached --stat
+        chdir: "{{ backup_dir }}"
+      register: git_diff_stat
+      when:
+        - git_status.stdout != ""
+        - has_real_changes | default(false)
+      changed_when: false
+
+    - name: Get full diff for changed routers
+      ansible.builtin.command:
+        cmd: git diff --cached
+        chdir: "{{ backup_dir }}"
+      register: git_diff_full
+      when:
+        - git_status.stdout != ""
+        - has_real_changes | default(false)
+      changed_when: false
+
+    - name: Save change details to file for email notification
+      ansible.builtin.copy:
+        content: |
+          Configuration Changes Detected
+          ==============================
+          Date: {{ ansible_date_time.iso8601 }}
+
+          Changed Files:
+          {{ git_status.stdout }}
+
+          Summary:
+          {{ git_diff_stat.stdout }}
+
+          Detailed Changes (excluding timestamp updates):
+          {{ git_diff_filtered.stdout }}
+        dest: "{{ playbook_dir }}/logs/config-changes.txt"
+        mode: '0644'
+      when:
+        - git_status.stdout != ""
+        - has_real_changes | default(false)
+        - hostvars['localhost']['notify_on_change'] | bool
 
     - name: Commit changes
       ansible.builtin.command:
