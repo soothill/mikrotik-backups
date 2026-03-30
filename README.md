@@ -24,8 +24,6 @@ This project uses Ansible to automatically backup MikroTik router configurations
 
 ### Python Dependencies (installed automatically by setup script)
 - Ansible 2.9 or higher
-- ansible-pylibssh (preferred SSH library for Ansible)
-- paramiko (fallback SSH library)
 - cryptography
 - pyyaml (for email alert configuration parsing)
 
@@ -76,7 +74,7 @@ Using a virtual environment isolates the project dependencies and prevents confl
 
 This script will:
 - Create a Python virtual environment in `venv/`
-- Install Ansible and required Python packages (paramiko, ansible-pylibssh)
+- Install Ansible and required Python packages
 - Install required Ansible collections
 - Provide usage instructions
 
@@ -95,7 +93,7 @@ pip install -r requirements.txt
 ansible-galaxy collection install -r requirements.yml
 ```
 
-**Note:** This requires SSH libraries (paramiko or ansible-pylibssh) to be installed for Ansible to connect to network devices.
+**Note:** Backups, user management, and discovery use the system `ssh` and `scp` clients from the Ansible control host. The primary workflow no longer depends on Ansible's deprecated Paramiko transport or the unstable `libssh` network CLI path.
 
 ### 3. Generate ed25519 SSH Key
 

@@ -39,11 +39,6 @@
     backup_dir: "{{ hostvars['localhost']['backup_dir'] }}"
 
   tasks:
-    - name: Override SSH settings from config
-      ansible.builtin.set_fact:
-        ansible_ssh_private_key_file: "{{ hostvars['localhost']['ssh_private_key'] }}"
-        ansible_port: "{{ hostvars['localhost']['ssh_port'] }}"
-
     - name: Get current timestamp
       ansible.builtin.set_fact:
         backup_timestamp: "{{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }}"
@@ -59,14 +54,29 @@
       run_once: true
 
     - name: Export router configuration
-      community.routeros.command:
-        commands:
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ hostvars['localhost']['ssh_private_key'] }}"
+          - -p
+          - "{{ (hostvars['localhost']['ssh_port'] | string) }}"
+          - -o
+          - BatchMode=yes
+          - -o
+          - ConnectTimeout=15
+          - -o
+          - ServerAliveInterval=5
+          - -o
+          - ServerAliveCountMax=3
+          - "{{ ansible_user }}@{{ ansible_host }}"
           - /export compact
       register: config_output
+      delegate_to: localhost
 
     - name: Save configuration to local file (overwrite for git versioning)
       ansible.builtin.copy:
-        content: "# Router: {{ inventory_hostname }}\n# Host: {{ ansible_host }}\n# Last backup: {{ backup_timestamp }}\n\n{{ config_output.stdout[0] }}"
+        content: "# Router: {{ inventory_hostname }}\n# Host: {{ ansible_host }}\n# Last backup: {{ backup_timestamp }}\n\n{{ config_output.stdout }}"
         dest: "{{ backup_dir }}/{{ backup_filename | default(inventory_hostname) }}.rsc"
         mode: '0644'
       delegate_to: localhost

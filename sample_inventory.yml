@@ -18,12 +18,5 @@ all:
         #   backup_filename: router3-branch
 
       vars:
-        # Connection settings for MikroTik RouterOS
-        ansible_connection: ansible.netcommon.network_cli
-        ansible_network_os: community.routeros.routeros
+        # SSH user with permission to run RouterOS commands
         ansible_user: admin
-        # SSH key authentication using ed25519 (more secure than RSA)
-        # Note: This will be overridden by config.yml settings
-        ansible_ssh_private_key_file: ~/.ssh/id_ed25519
-        # SSH port - can be overridden by config.yml
-        # ansible_port: 22

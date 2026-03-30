@@ -1,0 +1,134 @@
+---
+- name: Load Configuration
+  hosts: localhost
+  gather_facts: no
+  connection: local
+
+  tasks:
+    - name: Load configuration file
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/config.yml"
+        name: config
+
+    - name: Set global facts from config
+      ansible.builtin.set_fact:
+        ssh_private_key: "{{ config.ssh.private_key | expanduser }}"
+        ssh_port: "{{ config.ssh.port | default(22) }}"
+      delegate_to: localhost
+      delegate_facts: true
+
+- name: Discover MikroTik Neighbors from Working Routers
+  hosts: mikrotik_routers
+  gather_facts: no
+
+  vars:
+    ssh_private_key: "{{ hostvars['localhost']['ssh_private_key'] }}"
+    ssh_port: "{{ hostvars['localhost']['ssh_port'] }}"
+    ssh_target: "{{ ansible_user }}@{{ ansible_host }}"
+
+  tasks:
+    - name: Query current router identity over OpenSSH
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ ssh_private_key }}"
+          - -p
+          - "{{ ssh_port | string }}"
+          - -o
+          - BatchMode=yes
+          - -o
+          - ConnectTimeout=15
+          - "{{ ssh_target }}"
+          - /system identity print
+      register: identity_output
+      delegate_to: localhost
+      failed_when: false
+      changed_when: false
+
+    - name: Record current router identity
+      ansible.builtin.set_fact:
+        current_router_identity: "{{ identity_output.stdout | regex_search('name:\\s*(.+)$', '\\1', multiline=True) | first | default(inventory_hostname) | trim }}"
+
+    - name: Query MikroTik neighbors via OpenSSH
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ ssh_private_key }}"
+          - -p
+          - "{{ ssh_port | string }}"
+          - -o
+          - BatchMode=yes
+          - -o
+          - ConnectTimeout=15
+          - "{{ ssh_target }}"
+          - /ip neighbor print terse where platform="MikroTik"
+      register: neighbor_output
+      delegate_to: localhost
+      failed_when: false
+      changed_when: false
+
+    - name: Parse MikroTik neighbors with IPv4 addresses
+      ansible.builtin.set_fact:
+        parsed_neighbors: "{{ (parsed_neighbors | default([])) + [parsed_neighbor] }}"
+      vars:
+        parsed_neighbor:
+          source_router: "{{ inventory_hostname }}"
+          address: "{{ item | regex_search('(?:^| )address4=([^ ]+)', '\\1') | first }}"
+          identity: "{{ item | regex_search('(?:^| )identity=(.*?) platform=MikroTik', '\\1') | first }}"
+          board: "{{ item | regex_search('(?:^| )board=([^ ]+)', '\\1') | first | default('') }}"
+          discovered_by: "{{ item | regex_search('(?:^| )discovered-by=([^ ]+)', '\\1') | first | default('') }}"
+      loop: "{{ neighbor_output.stdout_lines | default([]) | select('search', 'platform=MikroTik') | select('search', 'address4=') | list }}"
+
+- name: Probe Newly Discovered MikroTik Routers
+  hosts: localhost
+  gather_facts: no
+  connection: local
+
+  vars:
+    known_router_addresses: "{{ groups['mikrotik_routers'] | map('extract', hostvars, 'ansible_host') | list }}"
+    known_router_identities: "{{ groups['mikrotik_routers'] | map('extract', hostvars, 'current_router_identity') | select('defined') | list }}"
+    discovered_neighbors: "{{ groups['mikrotik_routers'] | map('extract', hostvars, 'parsed_neighbors') | select('defined') | list | flatten }}"
+
+  tasks:
+    - name: Build list of new discovery candidates
+      ansible.builtin.set_fact:
+        discovery_candidates: "{{ (discovery_candidates | default([])) + [item] }}"
+      loop: "{{ discovered_neighbors }}"
+      when:
+        - item.address not in known_router_addresses
+        - item.identity not in known_router_identities
+        - item.address not in ((discovery_candidates | default([])) | map(attribute='address') | list)
+
+    - name: Test SSH connectivity to newly discovered routers
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ hostvars['localhost']['ssh_private_key'] }}"
+          - -p
+          - "{{ hostvars['localhost']['ssh_port'] | string }}"
+          - -o
+          - BatchMode=yes
+          - -o
+          - ConnectTimeout=10
+          - "{{ hostvars[item.source_router].ansible_user }}@{{ item.address }}"
+          - /system identity print
+      loop: "{{ discovery_candidates | default([]) }}"
+      register: connectivity_checks
+      failed_when: false
+      changed_when: false
+
+    - name: Report discovered routers
+      ansible.builtin.debug:
+        msg: |
+          {% set checks = connectivity_checks.results | default([]) %}
+          {% if checks | length == 0 %}
+          No additional MikroTik routers discovered beyond the current inventory.
+          {% else %}
+          Discovered MikroTik routers not currently in inventory:
+          {% for check in checks %}
+          - address={{ check.item.address }} identity={{ check.item.identity }} board={{ check.item.board | default('') }} via={{ check.item.source_router }} discovered_by={{ check.item.discovered_by }} reachable={{ 'yes' if check.rc == 0 else 'no' }}
+          {% endfor %}
+          {% endif %}

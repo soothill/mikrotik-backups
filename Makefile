@@ -1,4 +1,8 @@
-.PHONY: help install backup backup-with-alerts test-connection clean install-hooks config-check create-user
+.PHONY: help install backup backup-with-alerts test-connection discover clean install-hooks config-check create-user
+
+ANSIBLE_BIN := $(if $(wildcard venv/bin/ansible),venv/bin/ansible,ansible)
+ANSIBLE_PLAYBOOK_BIN := $(if $(wildcard venv/bin/ansible-playbook),venv/bin/ansible-playbook,ansible-playbook)
+ANSIBLE_GALAXY_BIN := $(if $(wildcard venv/bin/ansible-galaxy),venv/bin/ansible-galaxy,ansible-galaxy)
 
 # Default target - show help
 help:
@@ -11,9 +15,10 @@ help:
 	@echo "  make config-check      - Validate configuration file"
 	@echo ""
 	@echo "Backup Commands:"
-	@echo "  make backup              - Run backup playbook for all routers"
-	@echo "  make backup-with-alerts  - Run backup with email alerts on failure"
-	@echo "  make test-connection     - Test SSH connectivity to all routers"
+	@echo "  make backup            - Run backup playbook for all routers"
+	@echo "  make backup-with-alerts - Run backup with email alerts on failure"
+	@echo "  make test-connection   - Test SSH connectivity to all routers"
+	@echo "  make discover          - Discover additional MikroTik devices via LLDP/MNDP neighbors"
 	@echo ""
 	@echo "User Management Commands:"
 	@echo "  make create-user       - Create/update user with SSH key on routers"
@@ -28,7 +33,7 @@ help:
 # Install required Ansible collections
 install:
 	@echo "Installing Ansible collections..."
-	ansible-galaxy collection install -r requirements.yml
+	$(ANSIBLE_GALAXY_BIN) collection install -r requirements.yml
 
 # Install git hooks for auto-push
 install-hooks:
@@ -65,7 +70,7 @@ backup: config-check
 		echo "Copy sample_inventory.yml to inventory.yml and configure your routers"; \
 		exit 1; \
 	fi
-	ansible-playbook -i inventory.yml backup-routers.yml
+	$(ANSIBLE_PLAYBOOK_BIN) backup-routers.yml
 
 # Run backup with email alerts on failure
 backup-with-alerts: config-check
@@ -84,7 +89,17 @@ test-connection:
 		echo "Copy sample_inventory.yml to inventory.yml and configure your routers"; \
 		exit 1; \
 	fi
-	ansible -i inventory.yml mikrotik_routers -m community.routeros.command -a "commands='/system identity print'"
+	$(ANSIBLE_PLAYBOOK_BIN) test-routers.yml
+
+# Discover additional MikroTik routers from LLDP/MNDP neighbor data
+discover:
+	@echo "Discovering additional MikroTik routers..."
+	@if [ ! -f inventory.yml ]; then \
+		echo "Error: inventory.yml not found"; \
+		echo "Copy sample_inventory.yml to inventory.yml and configure your routers"; \
+		exit 1; \
+	fi
+	$(ANSIBLE_PLAYBOOK_BIN) discover-routers.yml
 
 # Create/update user with SSH key on routers
 create-user:
@@ -94,12 +109,12 @@ create-user:
 		echo "Copy sample_inventory.yml to inventory.yml and configure your routers"; \
 		exit 1; \
 	fi
-	@if ! grep -q "enabled: true" config.yml | grep -A 20 "user_management"; then \
+	@if ! awk 'BEGIN { in_block=0; enabled=0 } /^user_management:/ { in_block=1; next } in_block && /^[^[:space:]]/ { in_block=0 } in_block && /enabled:[[:space:]]*true/ { enabled=1 } END { exit(enabled ? 0 : 1) }' config.yml; then \
 		echo "Error: User management not enabled in config.yml"; \
 		echo "Please uncomment and configure the user_management section"; \
 		exit 1; \
 	fi
-	ansible-playbook -i inventory.yml create-user.yml
+	$(ANSIBLE_PLAYBOOK_BIN) create-user.yml
 
 # Clean up temporary files
 clean:

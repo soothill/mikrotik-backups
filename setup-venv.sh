@@ -63,7 +63,7 @@ echo -e "${GREEN}✓${NC} pip upgraded"
 
 # Install Python dependencies
 echo ""
-echo "Installing Python dependencies (Ansible, paramiko, ansible-pylibssh)..."
+echo "Installing Python dependencies (Ansible)..."
 pip install -r requirements.txt
 echo -e "${GREEN}✓${NC} Python dependencies installed"
 

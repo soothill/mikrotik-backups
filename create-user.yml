@@ -30,11 +30,6 @@
         msg: "SSH public key file not found: {{ config.user_management.ssh_public_key }}"
       when: not pubkey_file.stat.exists
 
-    - name: Read SSH public key
-      ansible.builtin.slurp:
-        src: "{{ config.user_management.ssh_public_key | expanduser }}"
-      register: ssh_pubkey_content
-
     - name: Set global facts from config
       ansible.builtin.set_fact:
         ssh_private_key: "{{ config.ssh.private_key | expanduser }}"
@@ -42,7 +37,7 @@
         new_username: "{{ config.user_management.username }}"
         new_user_group: "{{ config.user_management.group | default('full') }}"
         new_user_password: "{{ config.user_management.password | default('') }}"
-        ssh_public_key: "{{ ssh_pubkey_content.content | b64decode | trim }}"
+        ssh_public_key_path: "{{ config.user_management.ssh_public_key | expanduser }}"
       delegate_to: localhost
       delegate_facts: true
 
@@ -54,76 +49,153 @@
     new_username: "{{ hostvars['localhost']['new_username'] }}"
     new_user_group: "{{ hostvars['localhost']['new_user_group'] }}"
     new_user_password: "{{ hostvars['localhost']['new_user_password'] }}"
-    ssh_public_key: "{{ hostvars['localhost']['ssh_public_key'] }}"
+    ssh_private_key: "{{ hostvars['localhost']['ssh_private_key'] }}"
+    ssh_port: "{{ hostvars['localhost']['ssh_port'] }}"
+    ssh_public_key_path: "{{ hostvars['localhost']['ssh_public_key_path'] }}"
+    ssh_target: "{{ ansible_user }}@{{ ansible_host }}"
+    remote_pubkey_file: "{{ new_username }}-ansible-key.pub"
 
   tasks:
-    - name: Override SSH settings from config
-      ansible.builtin.set_fact:
-        ansible_ssh_private_key_file: "{{ hostvars['localhost']['ssh_private_key'] }}"
-        ansible_port: "{{ hostvars['localhost']['ssh_port'] }}"
-
     - name: Check if user already exists
-      community.routeros.command:
-        commands:
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ ssh_private_key }}"
+          - -p
+          - "{{ ssh_port | string }}"
+          - -o
+          - BatchMode=yes
+          - -o
+          - ConnectTimeout=15
+          - "{{ ssh_target }}"
           - "/user print where name={{ new_username }}"
       register: user_check
+      delegate_to: localhost
       failed_when: false
+      changed_when: false
 
     - name: Create user if it doesn't exist
-      community.routeros.command:
-        commands:
-          - "/user add name={{ new_username }} group={{ new_user_group }}{{ ' password=' + new_user_password if new_user_password else '' }}"
-      when: user_check.stdout[0] == ""
-      register: user_create
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ ssh_private_key }}"
+          - -p
+          - "{{ ssh_port | string }}"
+          - -o
+          - BatchMode=yes
+          - -o
+          - ConnectTimeout=15
+          - "{{ ssh_target }}"
+          - >-
+            /user add name={{ new_username }} group={{ new_user_group }}{% if new_user_password %} password="{{ new_user_password | replace('"', '\"') }}"{% endif %}
+      when: user_check.stdout == ""
+      delegate_to: localhost
 
     - name: Update user group if user exists
-      community.routeros.command:
-        commands:
-          - "/user set {{ new_username }} group={{ new_user_group }}"
-      when: user_check.stdout[0] != ""
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ ssh_private_key }}"
+          - -p
+          - "{{ ssh_port | string }}"
+          - -o
+          - BatchMode=yes
+          - -o
+          - ConnectTimeout=15
+          - "{{ ssh_target }}"
+          - "/user set [find where name={{ new_username }}] group={{ new_user_group }}"
+      when: user_check.stdout != ""
+      delegate_to: localhost
 
     - name: Update user password if provided and user exists
-      community.routeros.command:
-        commands:
-          - "/user set {{ new_username }} password={{ new_user_password }}"
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ ssh_private_key }}"
+          - -p
+          - "{{ ssh_port | string }}"
+          - -o
+          - BatchMode=yes
+          - -o
+          - ConnectTimeout=15
+          - "{{ ssh_target }}"
+          - >-
+            /user set [find where name={{ new_username }}] password="{{ new_user_password | replace('"', '\"') }}"
       when:
-        - user_check.stdout[0] != ""
+        - user_check.stdout != ""
         - new_user_password != ""
+      delegate_to: localhost
       no_log: true
 
-    - name: Check if SSH key already exists for user
-      community.routeros.command:
-        commands:
-          - "/user ssh-keys print where user={{ new_username }}"
-      register: ssh_key_check
+    - name: Remove old SSH keys for user if they exist
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ ssh_private_key }}"
+          - -p
+          - "{{ ssh_port | string }}"
+          - -o
+          - BatchMode=yes
+          - -o
+          - ConnectTimeout=15
+          - "{{ ssh_target }}"
+          - "/user ssh-keys remove [find where user={{ new_username }}]"
+      delegate_to: localhost
       failed_when: false
 
-    - name: Extract key name from existing keys
-      ansible.builtin.set_fact:
-        existing_key_line: "{{ ssh_key_check.stdout[0].split('\n') | select('match', '.*name=.*') | first | default('') }}"
-      when: ssh_key_check.stdout[0] != ""
+    - name: Upload SSH public key to router
+      ansible.builtin.command:
+        argv:
+          - scp
+          - -i
+          - "{{ ssh_private_key }}"
+          - -P
+          - "{{ ssh_port | string }}"
+          - -o
+          - BatchMode=yes
+          - -o
+          - ConnectTimeout=15
+          - "{{ ssh_public_key_path }}"
+          - "{{ ssh_target }}:{{ remote_pubkey_file }}"
+      delegate_to: localhost
 
-    - name: Parse existing key name
-      ansible.builtin.set_fact:
-        existing_key_name: "{{ existing_key_line | regex_search('name=([^\\s]+)', '\\1') | first | default('') }}"
-      when:
-        - ssh_key_check.stdout[0] != ""
-        - existing_key_line is defined
-        - existing_key_line != ""
+    - name: Import uploaded SSH public key for user
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ ssh_private_key }}"
+          - -p
+          - "{{ ssh_port | string }}"
+          - -o
+          - BatchMode=yes
+          - -o
+          - ConnectTimeout=15
+          - "{{ ssh_target }}"
+          - "/user ssh-keys import user={{ new_username }} public-key-file={{ remote_pubkey_file }}"
+      delegate_to: localhost
 
-    - name: Remove old SSH key if it exists
-      community.routeros.command:
-        commands:
-          - "/user ssh-keys remove {{ existing_key_name }}"
-      when:
-        - existing_key_name is defined
-        - existing_key_name != ""
-
-    - name: Add SSH public key for user
-      community.routeros.command:
-        commands:
-          - "/user ssh-keys import user={{ new_username }} public-key-file=none key-data=\"{{ ssh_public_key }}\""
-      register: key_import
+    - name: Remove uploaded SSH public key file from router
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ ssh_private_key }}"
+          - -p
+          - "{{ ssh_port | string }}"
+          - -o
+          - BatchMode=yes
+          - -o
+          - ConnectTimeout=15
+          - "{{ ssh_target }}"
+          - "/file remove {{ remote_pubkey_file }}"
+      delegate_to: localhost
+      failed_when: false
 
     - name: Display success message
       ansible.builtin.debug:

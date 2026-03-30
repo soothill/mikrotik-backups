@@ -1,0 +1,44 @@
+---
+- name: Load Configuration
+  hosts: localhost
+  gather_facts: no
+  connection: local
+
+  tasks:
+    - name: Load configuration file
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/config.yml"
+        name: config
+
+    - name: Set global facts from config
+      ansible.builtin.set_fact:
+        ssh_private_key: "{{ config.ssh.private_key | expanduser }}"
+        ssh_port: "{{ config.ssh.port | default(22) }}"
+      delegate_to: localhost
+      delegate_facts: true
+
+- name: Test SSH Connectivity to MikroTik Routers
+  hosts: mikrotik_routers
+  gather_facts: no
+
+  tasks:
+    - name: Query router identity over OpenSSH
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ hostvars['localhost']['ssh_private_key'] }}"
+          - -p
+          - "{{ (hostvars['localhost']['ssh_port'] | string) }}"
+          - -o
+          - BatchMode=yes
+          - -o
+          - ConnectTimeout=15
+          - "{{ ansible_user }}@{{ ansible_host }}"
+          - /system identity print
+      register: identity_output
+      delegate_to: localhost
+
+    - name: Display router identity
+      ansible.builtin.debug:
+        msg: "{{ identity_output.stdout }}"
