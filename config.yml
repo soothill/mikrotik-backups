@@ -14,7 +14,7 @@ backup_repo:
   #   - GitHub: git@github.com:username/mikrotik-config-backups.git
   #   - GitLab: git@gitlab.com:username/mikrotik-config-backups.git
   #   - Self-hosted: git@git.example.com:username/mikrotik-config-backups.git
-  remote_url: ""
+  remote_url: "git@github.com:soothill/mikrotik-config-backup.git"
 
   # Branch name to use for backups
   branch: "main"

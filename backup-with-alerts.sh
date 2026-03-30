@@ -68,8 +68,9 @@ echo -e "${GREEN}Starting MikroTik Router Backup...${NC}"
 echo "Log file: $LOG_FILE"
 echo ""
 
-# Run the backup playbook
-if ansible-playbook -i inventory.yml backup-routers.yml 2>&1 | tee "$LOG_FILE"; then
+# Run the backup through the repository's normal entrypoint so it uses the
+# same venv-aware command resolution and Ansible config as interactive use.
+if make backup 2>&1 | tee "$LOG_FILE"; then
     # Success
     echo ""
     echo -e "${GREEN}========================================${NC}"
